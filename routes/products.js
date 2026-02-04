@@ -1,6 +1,16 @@
 import express from 'express';
 import { supabase, supabaseAdmin } from '../supabase.js';
-import { verifyToken, verifyAdmin } from './auth.js';
+
+// Simple admin header check to allow product management without full auth system.
+// Frontend admin page must send `x-admin-user` and `x-admin-pass` headers.
+const ADMIN_USER = process.env.ADMIN_USER || 'macrameartistry@gmail.com';
+const ADMIN_PASS = process.env.ADMIN_PASS || '12345678';
+
+const isAdminRequest = (req) => {
+    const user = req.headers['x-admin-user'];
+    const pass = req.headers['x-admin-pass'];
+    return user === ADMIN_USER && pass === ADMIN_PASS;
+};
 
 const router = express.Router();
 
@@ -51,8 +61,9 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE PRODUCT (ADMIN ONLY)
-router.post('/', verifyToken, verifyAdmin, async (req, res) => {
+router.post('/', async (req, res) => {
     try {
+        if (!isAdminRequest(req)) return res.status(403).json({ message: 'Access denied. Admin credentials required in headers.' });
         const { name, description, price, category, image_url, stock, material, featured } = req.body;
 
         if (!name || !description || !price || !image_url) {
@@ -78,6 +89,8 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
 
         if (error) throw error;
 
+        console.log(`🆕 New product added: ${product.name} (id: ${product.id})`);
+
         res.status(201).json({ message: 'Product created successfully', product });
     } catch (error) {
         res.status(500).json({ message: 'Failed to create product', error: error.message });
@@ -85,8 +98,9 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // UPDATE PRODUCT (ADMIN ONLY)
-router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
+        if (!isAdminRequest(req)) return res.status(403).json({ message: 'Access denied. Admin credentials required in headers.' });
         const { data: product, error } = await supabaseAdmin
             .from('products')
             .update(req.body)
@@ -104,8 +118,9 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // DELETE PRODUCT (ADMIN ONLY)
-router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
+        if (!isAdminRequest(req)) return res.status(403).json({ message: 'Access denied. Admin credentials required in headers.' });
         const { error } = await supabaseAdmin.from('products').delete().eq('id', req.params.id);
         if (error) throw error;
         res.json({ message: 'Product deleted successfully' });

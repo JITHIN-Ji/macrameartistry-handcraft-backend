@@ -15,12 +15,7 @@ const __dirname = path.dirname(__filename);
 import { supabase } from './supabase.js';
 
 // Import routes
-import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
-import cartRoutes from './routes/cart.js';
-import orderRoutes from './routes/orders.js';
-import paymentRoutes from './routes/payment.js';
-import userRoutes from './routes/users.js';
 
 const app = express();
 
@@ -67,12 +62,8 @@ app.get('/api/health', async (req, res) => {
 // ==================== 
 // API ROUTES
 // ====================
-app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/payment', paymentRoutes);
-app.use('/api/users', userRoutes);
+// Auth, cart, order, payment and user management routes removed per simplified setup.
 
 // (health check route replaced above)
 
