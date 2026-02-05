@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { supabase, supabaseAdmin } from '../supabase.js';
 
 // Simple admin header check to allow product management without full auth system.
@@ -12,7 +13,57 @@ const isAdminRequest = (req) => {
     return user === ADMIN_USER && pass === ADMIN_PASS;
 };
 
+// Configure multer for file uploads
+const upload = multer({ storage: multer.memoryStorage() });
+const BUCKET_NAME = 'products-images';
+
 const router = express.Router();
+
+// UPLOAD IMAGES TO SUPABASE STORAGE (ADMIN ONLY)
+router.post('/upload-images', upload.array('images', 10), async (req, res) => {
+    try {
+        if (!isAdminRequest(req)) {
+            return res.status(403).json({ message: 'Access denied. Admin credentials required in headers.' });
+        }
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: 'No images provided' });
+        }
+
+        const uploadedPaths = [];
+
+        for (const file of req.files) {
+            try {
+                const filename = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${file.originalname}`;
+                const filePath = filename;
+
+                const { error } = await supabaseAdmin.storage
+                    .from(BUCKET_NAME)
+                    .upload(filePath, file.buffer, {
+                        contentType: file.mimetype,
+                    });
+
+                if (error) {
+                    throw new Error(`Failed to upload ${file.originalname}: ${error.message}`);
+                }
+
+                uploadedPaths.push(filePath);
+                console.log(`✅ Image uploaded: ${filePath}`);
+            } catch (err) {
+                console.error(`❌ Error uploading ${file.originalname}:`, err.message);
+                throw err;
+            }
+        }
+
+        res.status(200).json({
+            message: 'Images uploaded successfully',
+            imagePaths: uploadedPaths,
+        });
+    } catch (error) {
+        console.error('❌ Image upload error:', error.message);
+        res.status(500).json({ message: 'Failed to upload images', error: error.message });
+    }
+});
 
 // GET ALL PRODUCTS
 router.get('/', async (req, res) => {
@@ -64,10 +115,17 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         if (!isAdminRequest(req)) return res.status(403).json({ message: 'Access denied. Admin credentials required in headers.' });
-        const { name, description, price, category, image_url, stock, material, featured } = req.body;
+        const { name, description, price, category, image_path, image_paths, stock, material, featured } = req.body;
 
-        if (!name || !description || !price || !image_url) {
+        if (!name || !description || !price) {
             return res.status(400).json({ message: 'Required fields missing' });
+        }
+
+        // Validate that at least one image path is provided
+        const imagePaths = image_paths && image_paths.length > 0 ? image_paths : (image_path ? [image_path] : null);
+        
+        if (!imagePaths || imagePaths.length === 0) {
+            return res.status(400).json({ message: 'At least one image path is required' });
         }
 
         const { data: product, error } = await supabaseAdmin
@@ -78,7 +136,8 @@ router.post('/', async (req, res) => {
                     description,
                     price,
                     category: category || 'other',
-                    image_url,
+                    image_path: imagePaths[0], // Store first image path as main image_path
+                    image_paths: imagePaths, // Store all image paths in image_paths array
                     stock: stock || 0,
                     material: material || '',
                     featured: featured || false,
